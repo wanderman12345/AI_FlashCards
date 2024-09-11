@@ -4,23 +4,46 @@ import Image from "next/image";
 import { useState } from 'react'; // Import useState
 import { SingleImageDropzone } from '@/components/SingeImageDropzone';
 import { useEdgeStore } from '../lib/edgestore';
+import { uploadFileToFirebase } from '@/services/firebase';
 
 export default function Home() {
   const [file, setFile] = useState<File>();
   const { edgestore } = useEdgeStore();
+  const [view, setView] = useState<'upload' | 'loading' | 'display'>('upload');
+  const [fileContent, setFileContent] = useState<string>('');
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    setFile(selectedFile);
+  const handleFileChange = (file: File) => {
+    setFile(file);
   };
 
-  const handleUpload = async () => {
-    if (file) {
-      // Handle file upload logic here
-      console.log('Uploading file:', file.name);
-      // You can call your API or perform any necessary actions
+ const handleUpload = async () => {
+  if (file) {
+    // Upload file to Firebase
+    const downloadURL = await uploadFileToFirebase(file);
+    console.log('File uploaded to:', downloadURL);
+     // Update state with file content and change view
+    //  setFileContent(downloadURL);
+
+    // Send the download URL to the API route for processing
+    const response = await fetch('http://localhost:3000/api/process-pdf', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: downloadURL }),
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      setFileContent(data.text);
+      console.log("response succe")
+      setView('display');
+    } else {
+      console.error('Failed to process file');
+      setView('upload');
     }
-  };
+  }
+};
 
   return (
     <div className="relative min-h-screen flex flex-col">
@@ -34,36 +57,27 @@ export default function Home() {
       </div>
       {/* Main content */}
       <div className="flex-grow"></div>
-      {/* File upload section */}
-      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 mb-8">
-        <SingleImageDropzone
-          width={200}
-          height={200}
-          value={file}
-          onChange={(file) => {
-            setFile(file);
-          }}
-        />
-        <button
-          onClick={async () => {
-            if (file) {
-              const res = await edgestore.publicFiles.upload({
-                file,
-                onProgressChange: (progress) => {
-                  // you can use this to show a progress bar
-                  console.log(progress);
-                },
-              });
-              // you can run some server action or api here
-              // to add the necessary data to your database
-              console.log(res);
-            }
-          }}
-          className="mt-4 ml-16"
-        >
-          Upload
-        </button>
-      </div>
+      {view === 'display' && (
+          <div className="flex flex-col items-center">
+           Hello World
+          </div>
+        )}
+      {view === 'upload' && (
+          <div className="flex flex-col items-center">
+            <SingleImageDropzone
+              width={200}
+              height={200}
+              value={file}
+              onChange={handleFileChange}
+            />
+            <button
+              onClick={handleUpload}
+              className="mt-4 ml-16"
+            >
+              Upload
+            </button>
+          </div>
+        )}
     </div>
   );
 }
